@@ -1,0 +1,134 @@
+#Question 1+2+3
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(ggplot2)
+library(moments)
+library(stargazer)
+
+ds <- read.csv("C:/Users/ADMIN/Desktop/DHRUV/IIIT Delhi/Fourth Sem/Econometrics/NDAP_REPORT_7063.csv")
+ps <- read.csv("C:/Users/ADMIN/Desktop/DHRUV/IIIT Delhi/Fourth Sem/Econometrics/HSB_FILE - Sheet1.csv")
+
+View(ds)
+View(ps)
+
+ds <- ds[complete.cases(ds),]
+ds <- transform(ds, District_year_code = (ds$District.lgd.code)*10000+ ds$Yearcode)
+ds <- ds %>% group_by(District_year_code) %>% mutate(Ground.water.level.mean = mean(Ground.water.level)) %>% ungroup()
+ds <- ds[c("District_year_code", names(ds)[-which(names(ds) == "District_year_code")])]
+ds <- ds %>% mutate(State = toupper(State))
+#ds <- ds[, -12]
+ds <- ds %>% distinct(District_year_code, .keep_all = TRUE)
+
+ds$ID <- seq(nrow(ds))
+ds <- ds[c("ID", names(ds)[-which(names(ds) == "ID")])]
+colnames(ps)[21] <- "ODISHA"
+colnames(ds)[9] <- "YEAR"
+
+ps <- slice(ps, 5:nrow(ps))
+ps$YEAR <- substr(ps$YEAR, 1, 4)
+names(ps) <- gsub("\\.\\.\\.", " AND ", names(ps)) 
+names(ps) <- gsub("\\.", " ", names(ps))
+ps[ps == "-"] <- NA
+ps[ps == ""] <- NA
+shape <- gather(ps, key = "State", value = "value", -YEAR)
+View(ds)
+View(shape)
+
+merged <- merge(ds,shape, by = c("YEAR","State"))
+View(merged)
+merged <- na.omit(merged)
+
+#Question 4
+
+gini <- read.csv("C:/Users/ADMIN/Desktop/DHRUV/IIIT Delhi/Fourth Sem/Econometrics/gini.xlsx - Table 10.csv")
+
+colnames(gini)[1] <- "District"
+colnames(gini)[2] <- "Gini"
+View(gini)
+
+merged_f <- merge(merged,gini, by = c("District"))
+merged_f$value <- as.numeric(merged_f$value)
+View(merged_f)
+
+write.csv(merged_f, file = "Group_12.csv", row.names = FALSE)
+
+coke <- read.csv("C:/Users/ADMIN/Desktop/DHRUV/IIIT Delhi/Fourth Sem/Econometrics/Group_12.csv")
+View(coke)
+
+#Question 5
+
+hist(merged_f$value,main ="SDP Histogram",xlab="SDP")
+hist(merged_f$Gini,main ="Gini Histogram",xlab="GINI")
+boxplot(merged_f$value,main="Boxplot of SDP",ylab="Frequency",xlab="SDP")
+boxplot(merged_f$Gini,main="Boxplot of GINI",ylab="Frequency",xlab="GINI")
+
+# Ground water level
+max(merged_f$Ground.water.level.mean,na.rm = TRUE)
+min(merged_f$Ground.water.level.mean,na.rm = TRUE)
+
+# Histogram
+ggplot(merged_f, aes(x = Ground.water.level.mean)) + 
+  geom_histogram(binwidth = 100) + geom_histogram(fill = "white", colour = "black")+
+  scale_x_continuous(limits = c(0, 350))
+labs(x = "Ground.water.level.mean)", y = "Count")
+
+# Box-plot
+ggplot(data = merged_f, aes(y = Ground.water.level.mean)) +
+  geom_boxplot() +
+  labs(y = "Ground.water.level.mean")
+
+#Skewness
+skewness(merged_f$value, na.rm = TRUE)
+skewness(merged_f$Gini ,na.rm=TRUE)
+skewness(merged_f$Ground.water.level.mean ,na.rm=TRUE)
+
+#Question 6
+
+slrm <- lm(formula = merged_f$Ground.water.level.mean ~ merged_f$value, data = na.omit(merged_f))
+summary(slrm)
+stargazer(slrm)
+stargazer(slrm, type = "text", out = "slrm.txt")
+
+# Question 7
+#Residuals
+coke$residuals <- NA
+residuals1 <- residuals(slrm)
+# Calculate model residuals
+coke$residuals <- residuals1
+
+# Plot SDP vs. EQI with residuals as the color
+plot(coke$value, coke$Ground.water.level.mean , col = abs(coke$residuals), 
+     xlab = "SDP", ylab = "Environmental Quality Indicator",
+     main = "Residuals Colored by SDP vs. EQI")
+
+# Plot residuals vs. SDP
+plot(coke$value, coke$resid, 
+     xlab = "SDP", ylab = "Residuals",
+     main = "Residuals vs. SDP")
+
+# Plot predicted vs. true Environmental Quality Indicator
+plot(coke$Ground.water.level.mean , predict(slrm), col = "red",
+     xlab = "True EQ Indicator", ylab = "Predicted EQ Indicator",
+     main = "Predicted vs. True EQ Indicator")
+
+
+#QUESTION 8
+
+hist(coke$residuals, breaks = 20, main = "Residuals Histogram", xlab = "Residuals")
+sum_resid <- sum(coke$residuals)
+print(paste0("Sum of residuals: ", sum_resid))
+print("Since the sum of the residuals is such a small value that it is tending to zero, we can assume it to zero and hence it is verified that ∑i,t ûi,t = 0")
+
+#QUESTION 9
+
+#Estimating the given regression
+View(coke)
+coke <- transform(coke, val_square = value^2)
+coke <- transform(coke, val_cube = value^3)
+mnm <- lm(formula = Ground.water.level.mean ~ value + val_square + val_cube + Gini, data = coke)
+summary(mnm)
+stargazer(mnm) 
+stargazer(mnm, type = "text", out = "mnm.txt")
+
+write.csv(merged_f, file = "Group_12.csv", row.names = FALSE)
